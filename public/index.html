@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feedback Script Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;650;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ffffff;
+    --surface:#FBFBFA;
+    --surface-2:#F4F5F3;
+    --border:#E5E4DF;
+    --ink:#15171B;
+    --ink-soft:#4B4F58;
+    --muted:#868C90;
+    --primary:#1F3A5F;
+    --primary-ink:#ffffff;
+    --focus:#1F3A5F;
+
+    --direct:#9C4221;
+    --direct-tint:#FBEEE7;
+    --coaching:#2F6F4E;
+    --coaching-tint:#EAF4EE;
+    --supportive:#6B4C7A;
+    --supportive-tint:#F3ECF5;
+
+    --radius:12px;
+    --shadow: 0 1px 2px rgba(20,22,26,0.05), 0 10px 28px rgba(20,22,26,0.06);
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  body{ padding:0 0 64px 0; }
+
+  .wrap{
+    max-width:1160px;
+    margin:0 auto;
+    padding:0 32px;
+  }
+
+  header.page{
+    padding:44px 32px 8px 32px;
+    max-width:1160px;
+    margin:0 auto;
+  }
+
+  header.page h1{
+    font-size:26px;
+    font-weight:650;
+    letter-spacing:-0.01em;
+    margin:0 0 8px 0;
+  }
+
+  header.page p{
+    margin:0;
+    font-size:15px;
+    color:var(--ink-soft);
+    max-width:580px;
+    line-height:1.5;
+  }
+
+  .app{
+    display:grid;
+    grid-template-columns:minmax(320px,440px) 1fr;
+    gap:28px;
+    align-items:start;
+    margin-top:32px;
+  }
+
+  @media (max-width:900px){
+    .app{ grid-template-columns:1fr; }
+    header.page{ padding:32px 16px 4px 16px; }
+    .wrap{ padding:0 16px; }
+  }
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+  }
+
+  /* ---------- form ---------- */
+
+  .form-card{ padding:28px; }
+
+  .form-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    margin-bottom:20px;
+  }
+
+  .form-head h2{
+    font-size:15px;
+    font-weight:650;
+    margin:0;
+  }
+
+  .clear-link{
+    font-size:13px;
+    color:var(--muted);
+    background:none;
+    border:none;
+    cursor:pointer;
+    padding:0;
+    font-family:inherit;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  .clear-link:hover{ color:var(--ink-soft); }
+
+  .field{ margin-bottom:20px; }
+
+  .field label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    margin-bottom:6px;
+  }
+
+  .field .hint{
+    font-size:12px;
+    color:var(--muted);
+    margin-top:5px;
+    line-height:1.4;
+  }
+
+  textarea, select{
+    width:100%;
+    font-family:inherit;
+    font-size:14.5px;
+    color:var(--ink);
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:9px;
+    padding:11px 12px;
+    line-height:1.5;
+    resize:vertical;
+  }
+
+  textarea{ min-height:72px; }
+
+  textarea:focus, select:focus, button:focus-visible{
+    outline:2px solid var(--focus);
+    outline-offset:1px;
+    border-color:var(--focus);
+  }
+
+  .segmented{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+
+  .seg-btn{
+    flex:1 1 auto;
+    text-align:center;
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:550;
+    padding:9px 10px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--ink-soft);
+    cursor:pointer;
+    white-space:nowrap;
+  }
+
+  .seg-btn[aria-pressed="true"]{
+    background:var(--primary);
+    border-color:var(--primary);
+    color:var(--primary-ink);
+  }
+
+  .seg-btn.tone[data-tone="direct"][aria-pressed="true"]{ background:var(--direct); border-color:var(--direct); }
+  .seg-btn.tone[data-tone="coaching"][aria-pressed="true"]{ background:var(--coaching); border-color:var(--coaching); }
+  .seg-btn.tone[data-tone="supportive"][aria-pressed="true"]{ background:var(--supportive); border-color:var(--supportive); }
+
+  .generate-btn{
+    width:100%;
+    margin-top:6px;
+    padding:13px 16px;
+    font-family:inherit;
+    font-size:15px;
+    font-weight:650;
+    color:#fff;
+    background:var(--primary);
+    border:none;
+    border-radius:9px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:9px;
+  }
+  .generate-btn:hover{ filter:brightness(1.08); }
+  .generate-btn:disabled{ opacity:0.65; cursor:default; }
+
+  .spinner{
+    width:15px; height:15px;
+    border-radius:50%;
+    border:2px solid rgba(255,255,255,0.4);
+    border-top-color:#fff;
+    animation:spin 0.7s linear infinite;
+    display:none;
+  }
+  .generate-btn.loading .spinner{ display:inline-block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .error-box{
+    margin-top:14px;
+    padding:12px 14px;
+    border-radius:8px;
+    background:#FBEEE7;
+    border:1px solid #E7C7B4;
+    color:#7A3418;
+    font-size:13.5px;
+    line-height:1.5;
+    display:none;
+  }
+  .error-box.show{ display:block; }
+
+  /* ---------- output ---------- */
+
+  .output-card{ padding:0; min-height:420px; display:flex; flex-direction:column; }
+
+  .empty-state{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+    padding:56px 40px;
+    color:var(--muted);
+    font-size:14.5px;
+    line-height:1.6;
+    max-width:440px;
+  }
+  .empty-state strong{ color:var(--ink-soft); display:block; margin-bottom:6px; font-size:15px; }
+
+  .output-head{
+    padding:22px 28px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+
+  .output-meta{ font-size:13px; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; }
+  .output-meta span strong{ color:var(--ink-soft); font-weight:600; }
+
+  .tone-chips{ display:flex; gap:6px; }
+
+  .chip{
+    font-size:12.5px;
+    font-weight:600;
+    padding:6px 12px;
+    border-radius:999px;
+    border:1px solid transparent;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .chip[data-tone="direct"]{ background:var(--direct-tint); color:var(--direct); }
+  .chip[data-tone="coaching"]{ background:var(--coaching-tint); color:var(--coaching); }
+  .chip[data-tone="supportive"]{ background:var(--supportive-tint); color:var(--supportive); }
+  .chip.active{ border-color:currentColor; }
+  .chip:hover{ filter:brightness(0.97); }
+
+  .output-body{ padding:28px; }
+
+  .opening{
+    font-size:16.5px;
+    font-weight:600;
+    line-height:1.5;
+    margin:0 0 26px 0;
+    padding-bottom:22px;
+    border-bottom:1px solid var(--border);
+  }
+
+  .sbi-list{
+    list-style:none;
+    margin:0 0 26px 0;
+    padding:0;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  .sbi-item{ display:flex; gap:14px; }
+
+  .sbi-num{
+    flex:none;
+    width:24px; height:24px;
+    border-radius:50%;
+    background:var(--surface-2);
+    color:var(--ink-soft);
+    font-size:12px;
+    font-weight:650;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin-top:1px;
+  }
+
+  .sbi-text .sbi-label{
+    font-size:12.5px;
+    font-weight:650;
+    color:var(--ink-soft);
+    margin:0 0 3px 0;
+  }
+
+  .sbi-text p{
+    margin:0;
+    font-size:14.5px;
+    line-height:1.6;
+    color:var(--ink);
+  }
+
+  .pushback-box{
+    background:var(--surface-2);
+    border-radius:10px;
+    padding:18px 20px;
+    margin-bottom:26px;
+  }
+
+  .pushback-row{ display:flex; gap:12px; margin-bottom:14px; }
+  .pushback-row:last-child{ margin-bottom:0; }
+
+  .pushback-tag{
+    flex:none;
+    font-size:11.5px;
+    font-weight:650;
+    color:var(--muted);
+    width:78px;
+    padding-top:1px;
+  }
+
+  .pushback-row p{
+    margin:0;
+    font-size:14.5px;
+    line-height:1.6;
+  }
+
+  .pushback-row.them p{ font-style:italic; color:var(--ink-soft); }
+
+  .closing-block{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    margin:0 0 24px 0;
+  }
+
+  .closing-block p{
+    margin:0;
+    font-size:14.5px;
+    line-height:1.6;
+  }
+
+  .closing-label{
+    font-size:12.5px;
+    font-weight:650;
+    color:var(--ink-soft);
+  }
+
+  .copy-btn{
+    font-family:inherit;
+    font-size:14px;
+    font-weight:600;
+    padding:10px 18px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .copy-btn:hover{ background:var(--surface-2); }
+  .copy-btn.copied{ border-color:var(--coaching); color:var(--coaching); }
+
+  @media (max-width:480px){
+    .pushback-row{ flex-direction:column; gap:4px; }
+    .pushback-tag{ width:auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="page">
+  <h1>Feedback script generator</h1>
+  <p>Describe the moment once, then draft the conversation in whichever tone and cultural context fits — and switch either without retyping anything.</p>
+</header>
+
+<div class="wrap">
+  <div class="app">
+
+    <!-- FORM -->
+    <div class="card form-card">
+      <div class="form-head">
+        <h2>The details</h2>
+        <button class="clear-link" id="clearBtn" type="button">Clear form</button>
+      </div>
+
+      <div class="field">
+        <label for="moment">The specific moment</label>
+        <textarea id="moment" placeholder="e.g. Yesterday, while Priya was presenting the pricing slide to the client, one of your questions pulled the conversation completely off track."></textarea>
+        <p class="hint">A concrete moment or data point works better than a general pattern — quote it if you can.</p>
+      </div>
+
+      <div class="field">
+        <label for="impact">The impact it had</label>
+        <textarea id="impact" placeholder="e.g. Priya lost her train of thought and had to backtrack, and the client seemed thrown off by the detour."></textarea>
+      </div>
+
+      <div class="field">
+        <label for="recommendation">What you'd like to see instead</label>
+        <textarea id="recommendation" placeholder="e.g. Save questions or additions for a natural pause, rather than interrupting mid-flow."></textarea>
+      </div>
+
+      <div class="field">
+        <label>Relationship context</label>
+        <div class="segmented" role="group" aria-label="Relationship context">
+          <button type="button" class="seg-btn" data-rel="direct_report" aria-pressed="true">Direct report</button>
+          <button type="button" class="seg-btn" data-rel="peer" aria-pressed="false">Peer</button>
+          <button type="button" class="seg-btn" data-rel="senior" aria-pressed="false">Someone senior</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Tone</label>
+        <div class="segmented" role="group" aria-label="Tone">
+          <button type="button" class="seg-btn tone" data-tone="direct" aria-pressed="true">Direct</button>
+          <button type="button" class="seg-btn tone" data-tone="coaching" aria-pressed="false">Coaching</button>
+          <button type="button" class="seg-btn tone" data-tone="supportive" aria-pressed="false">Supportive</button>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:8px;">
+        <label>Geography of the person receiving feedback</label>
+        <div class="segmented" role="group" aria-label="Geography">
+          <button type="button" class="seg-btn geo" data-geo="us" aria-pressed="true">US</button>
+          <button type="button" class="seg-btn geo" data-geo="europe" aria-pressed="false">Europe</button>
+          <button type="button" class="seg-btn geo" data-geo="asia" aria-pressed="false">Asia</button>
+          <button type="button" class="seg-btn geo" data-geo="emea_mea" aria-pressed="false">Middle East / Africa</button>
+        </div>
+        <p class="hint">Adjusts directness, formality, and framing to fit workplace norms in that region.</p>
+      </div>
+
+      <button class="generate-btn" id="generateBtn" type="button">
+        <span class="spinner"></span>
+        <span id="generateLabel">Generate script</span>
+      </button>
+
+      <div class="error-box" id="errorBox"></div>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="card output-card" id="outputCard">
+      <div class="empty-state" id="emptyState">
+        <strong>Nothing drafted yet</strong>
+        Fill in the moment, the impact, and what you'd like to see instead, then generate the script. It opens with a quick check-in, names the specific moment, covers the impact and your recommendation, and closes by inviting their
