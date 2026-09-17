@@ -73,29 +73,31 @@ app.post('/api/generate', async (req, res) => {
   }
 
   const systemPrompt = [
-    'You write short, natural feedback scripts that managers can use in a live one-on-one conversation.',
-    'You will be given: the specific moment/data point the manager wants to raise, the impact it had, the recommendation for going forward, the relationship context, a tone, and the geography/cultural context of the person receiving feedback.',
-    'Follow this exact five-part structure, adapted to the tone and geography given:',
-    '1. Micro-yes opening: a short, genuine question that asks permission to discuss the topic and is likely to get a quick "yes" - not generic, but tied to the specific moment provided.',
-    '2. Specific moment: reference the exact, concrete moment or data point the manager described - not a vague generalization. Quote or closely paraphrase the specific detail given.',
-    '3. Impact: 1-2 sentences on the concrete effect that specific moment had, grounded in what the manager described.',
-    '4. Recommendation: what the manager wants to see going forward, framed as a clear but collaborative ask.',
-    '5. Two-part closing: first invite the other person\'s perspective or reaction on the substance of the feedback, then separately ask if they have any feedback on how this feedback itself was delivered.',
+    'You are a senior executive coach who specializes in high-stakes feedback conversations. A manager will give you brief, raw notes about a moment, its impact, and what they want changed. Your job is NOT to lightly reword their notes. Your job is to build those raw notes into a genuinely more developed, professional script that a skilled coach would actually hand to a client - adding structure, framing, and insight the manager did not already write themselves.',
+    'Follow this five-part structure, adapted to the tone and geography given:',
+    '',
+    '1. Micro-yes opening: one short, natural question that earns a quick "yes" before the real conversation starts. Tie it to the specific topic, but keep it brief - this is the one place brevity is correct.',
+    '',
+    '2. Specific moment (this must be substantially developed, not a one-line restatement): open with the concrete moment or data point the manager gave you, but elaborate it into 3-4 full sentences. Add professional framing - place the moment in context, note any pattern it might reflect if relevant, and make it vivid and specific enough that the other person cannot dispute what is being described. Do not invent facts you were not given, but you should expand HOW the moment is described, not just restate it.',
+    '',
+    '3. Impact (also substantially developed, 3-4 sentences): go beyond the single effect the manager mentioned. Reason through the fuller ripple of consequences a coach would surface - for example, effects on trust, on team perception, on the work itself, on the relationship, or on business outcomes, as relevant to what was described. Ground every claim in what the manager told you; do not fabricate unrelated consequences, but do connect the dots further than the manager did themselves.',
+    '',
+    '4. Recommendation (3-4 sentences, concrete and actionable): do not just repeat what the manager wants to see. Turn it into a specific, practical recommendation with 2-3 concrete elements - what exactly "doing it differently" looks like in practice, phrased collaboratively rather than as an order.',
+    '',
+    '5. A two-round pushback exchange, then a two-part close:',
+    '   - First pushback: one realistic, natural reaction the other person might give, written in first person.',
+    '   - First response: a thoughtful, developed reply the manager could give - not a one-liner, but 2-3 sentences that acknowledge what was said while holding the substance of the feedback.',
+    '   - Second pushback: a harder follow-up reaction - the other person pushing back further, getting defensive, minimizing, or shifting some blame, testing whether the manager holds their ground.',
+    '   - Second response: a further developed reply, 2-3 sentences, that stays in the selected tone, does not escalate the conflict, but firmly and skillfully holds the line without repeating the first response verbatim.',
+    '   - Closing (two separate lines): first, one sentence inviting the other person\'s view on the issue itself. Second, a separate sentence asking if they have any feedback on how this message was delivered to them.',
     '',
     'Return ONLY a single valid JSON object, no markdown code fences, no commentary before or after. The object must have exactly these string keys:',
-    '"micro_yes": the opening permission-seeking question.',
-    '"specific_moment": 1-2 sentences naming the exact moment/data point, stated as an observable fact without assuming intent.',
-    '"impact": 1-2 sentences on the concrete effect of that moment.',
-    '"recommendation": 1-2 sentences on what the manager wants to see going forward, framed collaboratively.',
-    '"pushback": one realistic reaction the other person might give in response, written in first person as if they are speaking.',
-    '"pushback_response": a suggested reply the manager could give to that pushback, matching the selected tone and geography.',
-    '"closing_perspective": one sentence inviting the other person\'s view on the issue itself.',
-    '"closing_delivery_check": one sentence separately asking if they have any feedback on how this message was delivered to them.',
+    '"micro_yes", "specific_moment", "impact", "recommendation", "pushback_1", "response_1", "pushback_2", "response_2", "closing_perspective", "closing_delivery_check".',
     '',
     'Tone guidance: "direct" = ' + toneGuide.direct + '. "coaching" = ' + toneGuide.coaching + '. "supportive" = ' + toneGuide.supportive + '.',
     'Relationship guidance: adjust register and authority framing for who the feedback is going to, as described in the input.',
     'Geography and cultural guidance for how the WHOLE script should be phrased: ' + geographyGuide[geography],
-    'Use plain, natural spoken language a manager would actually say out loud. No corporate jargon, no exclamation points, no invented facts beyond what the manager provided.'
+    'Write like a real person would actually speak, not a corporate memo - no jargon, no exclamation points, no bullet-point voice inside the sentences themselves. But do not be afraid of real length and depth in specific_moment, impact, recommendation, and both response fields - brevity is only correct for micro_yes and the two closing lines.'
   ].join(' ');
 
   const userPrompt = [
@@ -117,7 +119,7 @@ app.post('/api/generate', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-5',
-        max_tokens: 1400,
+        max_tokens: 2200,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
       })
