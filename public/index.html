@@ -479,3 +479,252 @@
 
   </div>
 </div>
+<script>
+  const state = {
+    relationship: 'direct_report',
+    tone: 'direct',
+    geography: 'us',
+    lastResult: null
+  };
+
+  const relationshipLabels = {
+    direct_report: 'Direct report',
+    peer: 'Peer',
+    senior: 'Someone senior to you'
+  };
+
+  const toneLabels = { direct: 'Direct', coaching: 'Coaching', supportive: 'Supportive' };
+  const geoLabels = { us: 'US', europe: 'Europe', asia: 'Asia', emea_mea: 'Middle East / Africa' };
+
+  // ---- element refs ----
+  const momentEl = document.getElementById('moment');
+  const impactEl = document.getElementById('impact');
+  const recommendationEl = document.getElementById('recommendation');
+  const generateBtn = document.getElementById('generateBtn');
+  const generateLabel = document.getElementById('generateLabel');
+  const errorBox = document.getElementById('errorBox');
+  const outputCard = document.getElementById('outputCard');
+  const clearBtn = document.getElementById('clearBtn');
+
+  document.querySelectorAll('.seg-btn[data-rel]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.seg-btn[data-rel]').forEach(b=>b.setAttribute('aria-pressed','false'));
+      btn.setAttribute('aria-pressed','true');
+      state.relationship = btn.dataset.rel;
+    });
+  });
+
+  document.querySelectorAll('.seg-btn.tone').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      setTone(btn.dataset.tone);
+      if(state.lastResult){ generate(); }
+    });
+  });
+
+  document.querySelectorAll('.seg-btn.geo').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      setGeo(btn.dataset.geo);
+      if(state.lastResult){ generate(); }
+    });
+  });
+
+  function setTone(tone){
+    state.tone = tone;
+    document.querySelectorAll('.seg-btn.tone').forEach(b=>{
+      b.setAttribute('aria-pressed', b.dataset.tone === tone ? 'true' : 'false');
+    });
+  }
+
+  function setGeo(geo){
+    state.geography = geo;
+    document.querySelectorAll('.seg-btn.geo').forEach(b=>{
+      b.setAttribute('aria-pressed', b.dataset.geo === geo ? 'true' : 'false');
+    });
+  }
+
+  clearBtn.addEventListener('click', ()=>{
+    momentEl.value = '';
+    impactEl.value = '';
+    recommendationEl.value = '';
+    hideError();
+    state.lastResult = null;
+    outputCard.innerHTML = '<div class="empty-state" id="emptyState"><strong>Nothing drafted yet</strong>Fill in the moment, the impact, and what you\'d like to see instead, then generate the script. It opens with a quick check-in, names the specific moment, covers the impact and your recommendation, and closes by inviting their perspective on both the issue and how the feedback landed.</div>';
+    generateLabel.textContent = 'Generate script';
+  });
+
+  generateBtn.addEventListener('click', generate);
+
+  function hideError(){ errorBox.classList.remove('show'); errorBox.textContent=''; }
+  function showError(msg){ errorBox.textContent = msg; errorBox.classList.add('show'); }
+
+  function setLoading(isLoading){
+    generateBtn.disabled = isLoading;
+    generateBtn.classList.toggle('loading', isLoading);
+    generateLabel.textContent = isLoading ? 'Generating…' : (state.lastResult ? 'Regenerate script' : 'Generate script');
+  }
+
+  async function generate(){
+    const moment = momentEl.value.trim();
+    const impact = impactEl.value.trim();
+    const recommendation = recommendationEl.value.trim();
+
+    if(!moment || !impact || !recommendation){
+      showError('Fill in the specific moment, the impact, and what you\'d like to see instead — all three are needed to draft the script.');
+      return;
+    }
+    hideError();
+    setLoading(true);
+
+    try{
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moment: moment,
+          impact: impact,
+          recommendation: recommendation,
+          relationship: state.relationship,
+          tone: state.tone,
+          geography: state.geography
+        })
+      });
+
+      const parsed = await response.json();
+
+      if(!response.ok || parsed.error){
+        showError(parsed.error || 'Could not generate the script just now. Try again.');
+        return;
+      }
+
+      state.lastResult = parsed;
+      renderOutput(parsed);
+    }catch(err){
+      showError('Could not reach the server. Check your connection and try again.');
+    }finally{
+      setLoading(false);
+    }
+  }
+
+  function renderOutput(data){
+    const toneKey = state.tone;
+    const relLabel = relationshipLabels[state.relationship];
+    const geoLabel = geoLabels[state.geography];
+
+    outputCard.innerHTML = `
+      <div class="output-head">
+        <div class="output-meta">
+          <span><strong>For:</strong> ${escapeHtml(relLabel)}</span>
+          <span><strong>Geography:</strong> ${escapeHtml(geoLabel)}</span>
+        </div>
+        <div class="tone-chips">
+          ${['direct','coaching','supportive'].map(t => `
+            <button type="button" class="chip ${t===toneKey?'active':''}" data-tone="${t}">${toneLabels[t]}</button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="output-body">
+        <p class="opening">${escapeHtml(data.micro_yes)}</p>
+
+        <ul class="sbi-list">
+          ${sbiItem(1,'The specific moment', data.specific_moment)}
+          ${sbiItem(2,'Impact', data.impact)}
+          ${sbiItem(3,'Recommendation', data.recommendation)}
+        </ul>
+
+        <div class="pushback-box">
+          <div class="pushback-row them">
+            <div class="pushback-tag">They might say</div>
+            <p>${escapeHtml(data.pushback_1)}</p>
+          </div>
+          <div class="pushback-row you">
+            <div class="pushback-tag">You could say</div>
+            <p>${escapeHtml(data.response_1)}</p>
+          </div>
+          <div class="pushback-row them">
+            <div class="pushback-tag">If they push further</div>
+            <p>${escapeHtml(data.pushback_2)}</p>
+          </div>
+          <div class="pushback-row you">
+            <div class="pushback-tag">Hold your ground</div>
+            <p>${escapeHtml(data.response_2)}</p>
+          </div>
+        </div>
+
+        <div class="closing-block">
+          <div>
+            <div class="closing-label">Invite their perspective</div>
+            <p>${escapeHtml(data.closing_perspective)}</p>
+          </div>
+          <div>
+            <div class="closing-label">Check how it landed</div>
+            <p>${escapeHtml(data.closing_delivery_check)}</p>
+          </div>
+        </div>
+
+        <button class="copy-btn" id="copyBtn" type="button">Copy script</button>
+      </div>
+    `;
+
+    outputCard.querySelectorAll('.chip').forEach(chip=>{
+      chip.addEventListener('click', ()=>{
+        setTone(chip.dataset.tone);
+        generate();
+      });
+    });
+
+    document.getElementById('copyBtn').addEventListener('click', ()=>copyScript(data));
+  }
+
+  function sbiItem(num, label, text){
+    return `
+      <li class="sbi-item">
+        <div class="sbi-num">${num}</div>
+        <div class="sbi-text">
+          <p class="sbi-label">${label}</p>
+          <p>${escapeHtml(text)}</p>
+        </div>
+      </li>
+    `;
+  }
+
+  function copyScript(data){
+    const lines = [
+      data.micro_yes,
+      '',
+      'The specific moment: ' + data.specific_moment,
+      'Impact: ' + data.impact,
+      'Recommendation: ' + data.recommendation,
+      '',
+      'If they push back — "' + data.pushback_1 + '"',
+      'You could say: ' + data.response_1,
+      '',
+      'If they push further — "' + data.pushback_2 + '"',
+      'Hold your ground: ' + data.response_2,
+      '',
+      data.closing_perspective,
+      data.closing_delivery_check
+    ].join('\n');
+
+    navigator.clipboard.writeText(lines).then(()=>{
+      const btn = document.getElementById('copyBtn');
+      if(!btn) return;
+      const original = btn.textContent;
+      btn.textContent = 'Copied';
+      btn.classList.add('copied');
+      setTimeout(()=>{ btn.textContent = original; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+
+  function escapeHtml(str){
+    if(str === undefined || str === null) return '';
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#39;');
+  }
+</script>
+
+</body>
+</html>
