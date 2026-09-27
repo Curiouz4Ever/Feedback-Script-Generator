@@ -1,421 +1,154 @@
-<title>Say It Easy</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#FAF6EC;
-    --surface:#FFFFFF;
-    --surface-2:#F3EEE0;
-    --border:#E6DFCC;
-    --ink:#211D17;
-    --ink-soft:#4A4335;
-    --muted:#756C5C;
-    --primary:#8A6D2E;
-    --primary-ink:#ffffff;
-    --focus:#8A6D2E;
+const express = require('express');
+const path = require('path');
 
-    --direct:#9C4221;
-    --direct-tint:#FBEEE7;
-    --coaching:#2F6F4E;
-    --coaching-tint:#EAF4EE;
-    --supportive:#6B4C7A;
-    --supportive-tint:#F3ECF5;
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 
-    --radius:12px;
-    --shadow: 0 1px 2px rgba(20,22,26,0.05), 0 10px 28px rgba(20,22,26,0.06);
+// ---- simple per-IP daily cap so cost stays predictable at public scale ----
+const DAILY_LIMIT_PER_IP = 30;
+const usage = new Map(); // ip -> { count, day }
+
+function getDayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function checkAndIncrementLimit(ip) {
+  const day = getDayKey();
+  const entry = usage.get(ip);
+  if (!entry || entry.day !== day) {
+    usage.set(ip, { count: 1, day });
+    return true;
+  }
+  if (entry.count >= DAILY_LIMIT_PER_IP) {
+    return false;
+  }
+  entry.count += 1;
+  return true;
+}
+
+const relationshipPromptText = {
+  direct_report: 'a direct report of the manager',
+  peer: 'a peer of the manager, with no positional authority between them',
+  senior: 'someone senior to the manager, so the framing should be respectful upward feedback'
+};
+
+const toneGuide = {
+  direct: 'concise and clear, no hedging or over-softening, but still respectful',
+  coaching: 'curious and growth-oriented, uses open questions rather than pronouncements',
+  supportive: 'warm and empathetic, reassuring in delivery while still being clear about the change needed'
+};
+
+const geographyGuide = {
+  us: 'US workplace norms: reasonably direct and time-efficient, comfortable naming the issue plainly, but still relationship-conscious. Get to the point without excessive hedging.',
+  europe: 'Western European workplace norms: direct and fact-based, but more formal and measured than US style. Favor precise, evidence-led language over enthusiasm or informality, and avoid overly casual phrasing.',
+  asia: 'many Asian workplace cultures place a high value on preserving the other person\'s standing and dignity, especially in front of others. Favor indirect framing, softer phrasing, more context before the critical point, and give the person an easy way to save face. Avoid blunt or public-sounding language even in a one-on-one script.',
+  emea_mea: 'Middle East and Africa workplace norms: relationship and respect come before task talk. Favor a warmer, more personal framing, acknowledge the relationship or the person\'s effort before raising the issue, and avoid language that could read as cold or purely transactional.'
+};
+
+const geographyLabels = {
+  us: 'US',
+  europe: 'Europe',
+  asia: 'Asia',
+  emea_mea: 'Middle East and Africa'
+};
+
+app.post('/api/generate', async (req, res) => {
+  const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
+
+  if (!checkAndIncrementLimit(ip)) {
+    return res.status(429).json({ error: `You've reached today's limit of ${DAILY_LIMIT_PER_IP} generated scripts. Please try again tomorrow.` });
   }
 
-  *{ box-sizing:border-box; }
+  const { moment, impact, recommendation, relationship, tone, geography, individualNote } = req.body || {};
 
-  html,body{
-    margin:0;
-    padding:0;
-    background:var(--bg);
-    color:var(--ink);
-    font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    -webkit-font-smoothing:antialiased;
+  if (!moment || !impact || !recommendation || !relationship || !tone || !geography) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  if (!relationshipPromptText[relationship] || !toneGuide[tone] || !geographyGuide[geography]) {
+    return res.status(400).json({ error: 'Invalid relationship, tone, or geography value.' });
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set. Add it in your platform\'s environment variables or secrets.' });
   }
 
-  body{ padding:0 0 64px 0; }
+  const systemPrompt = [
+    'You are a senior executive coach who specializes in high-stakes feedback conversations, grounded in the fact-versus-story distinction from difficult-conversations research (the gap between what was actually observable and the interpretation layered on top of it). A manager will give you brief, raw notes about a moment, its impact, and what they want changed. Your job is NOT to lightly reword their notes. Your job is to build those raw notes into a genuinely more developed, psychologically sound, professional script that a skilled coach would actually hand to a client - adding structure, framing, and insight the manager did not already write themselves.',
+    'Follow this structure, adapted to the tone and geography given:',
+    '',
+    '0. Grounding note (private, for the manager only - never spoken aloud to the other person): 1-2 sentences that help the manager center themselves before the conversation - a reminder of what they actually want out of this (the relationship or outcome, not being right), and a cue toward a steady, curious tone. Write this in second person, addressed to the manager.',
+    '',
+    '1. Micro-yes opening: one short, natural question that invites the other person into the conversation. It must leave room for a genuine "no" or "not right now" - phrase it so declining is easy and normal, not just a rhetorical formality on the way to a lecture.',
+    '',
+    '2. Specific moment (substantially developed, 3-4 full sentences): take the concrete moment the manager described, but rewrite it as strictly observable fact - strip out any judgment, character-labeling, or evaluative language the manager used (words like "careless," "unprofessional," "lazy," "disrespectful" describe a story, not an observation; replace them with what was actually seen or heard). Do not add new judgments of your own either. Make it specific and concrete enough that the other person cannot reasonably dispute what is being described, without editorializing about why it happened.',
+    '',
+    '3. Impact (substantially developed, 3-4 sentences): reason through the fuller ripple of consequences a coach would surface - effects on trust, team perception, the work itself, the relationship, or business outcomes, as relevant to what was described. Ground every claim in what the manager told you; do not fabricate unrelated consequences, but do connect the dots further than the manager did themselves.',
+    '',
+    '4. Genuine curiosity check (this is a real question, not a formality): before any recommendation is delivered, ask the other person what was going on for them, written so it reads as authentic curiosity rather than a rhetorical setup for the verdict that follows. The manager does not yet have the full picture, and this script should reflect that.',
+    '',
+    '5. Recommendation (3-4 sentences, concrete and actionable): frame it as provisional on what the curiosity check might surface - acknowledge that the specifics could shift based on their answer, but still land a clear, specific, practical ask with 2-3 concrete elements, phrased collaboratively rather than as an order.',
+    '',
+    '6. A two-round pushback exchange, then a two-part close:',
+    '   - First pushback: one realistic, natural reaction the other person might give, written in first person.',
+    '   - First response: a thoughtful, developed reply the manager could give - not a one-liner, but 2-3 sentences that acknowledge what was said while holding the substance of the feedback.',
+    '   - Second pushback: a harder follow-up reaction - the other person pushing back further, getting defensive, minimizing, or shifting some blame.',
+    '   - Second response: this is NOT about winning the exchange or holding a position. Write 2-3 sentences that stay non-defensive, reflect back what the person said so they feel heard, re-anchor gently on the impact (not on being right), and pivot toward inviting them into solving it together - something like asking what would help them approach it differently next time, rather than a rebuttal.',
+    '   - Closing (two separate lines): first, one sentence inviting the other person\'s view on the issue itself. Second, a separate sentence asking if they have any feedback on how this message was delivered to them.',
+    '',
+    'Return ONLY a single valid JSON object, no markdown code fences, no commentary before or after. The object must have exactly these string keys:',
+    '"grounding_note", "micro_yes", "specific_moment", "impact", "curiosity_check", "recommendation", "pushback_1", "response_1", "pushback_2", "response_2", "closing_perspective", "closing_delivery_check".',
+    '',
+    'Tone guidance: "direct" = ' + toneGuide.direct + '. "coaching" = ' + toneGuide.coaching + '. "supportive" = ' + toneGuide.supportive + '.',
+    'Relationship guidance: adjust register and authority framing for who the feedback is going to, as described in the input.',
+    'Geography and cultural guidance for how the WHOLE script should be phrased (a starting default, not a stereotype about this individual): ' + geographyGuide[geography],
+    individualNote
+      ? 'IMPORTANT override: the manager has given a specific note about how this individual person prefers to receive feedback: "' + individualNote + '". Treat this as overriding the general regional default above wherever the two conflict - the individual\'s known preference always wins over a group-level assumption.'
+      : '',
+    'Write like a real person would actually speak, not a corporate memo - no jargon, no exclamation points, no bullet-point voice inside the sentences themselves. But do not be afraid of real length and depth in specific_moment, impact, recommendation, and both response fields - brevity is only correct for the grounding note, micro_yes, curiosity_check, and the two closing lines.'
+  ].filter(Boolean).join(' ');
 
-  .wrap{
-    max-width:1160px;
-    margin:0 auto;
-    padding:0 32px;
+  const userPrompt = [
+    'Specific moment / data point: ' + moment,
+    'Impact: ' + impact,
+    'Recommendation for going forward: ' + recommendation,
+    'Relationship context: ' + relationshipPromptText[relationship],
+    'Tone: ' + tone,
+    'Geography / cultural context of the person receiving feedback: ' + geographyLabels[geography],
+    individualNote ? 'Individual note about this specific person: ' + individualNote : ''
+  ].filter(Boolean).join('\n');
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 2600,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Anthropic API error:', response.status, errText);
+      return res.status(502).json({ error: 'The API request failed. Check the server logs.' });
+    }
+
+    const data = await response.json();
+    const textBlocks = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    const cleaned = textBlocks.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    res.json(parsed);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error generating the script.' });
   }
+});
 
-  header.page{
-    padding:44px 32px 8px 32px;
-    max-width:1160px;
-    margin:0 auto;
-  }
-
-  header.page h1{
-    font-family:'Cormorant Garamond', Georgia, serif;
-    font-size:38px;
-    font-weight:600;
-    letter-spacing:-0.01em;
-    margin:0 0 10px 0;
-    color:var(--ink);
-  }
-
-  header.page p{
-    margin:0;
-    font-size:15px;
-    color:var(--ink-soft);
-    max-width:580px;
-    line-height:1.5;
-  }
-
-  .app{
-    display:grid;
-    grid-template-columns:minmax(320px,440px) 1fr;
-    gap:28px;
-    align-items:start;
-    margin-top:32px;
-  }
-
-  @media (max-width:900px){
-    .app{ grid-template-columns:1fr; }
-    header.page{ padding:32px 16px 4px 16px; }
-    .wrap{ padding:0 16px; }
-  }
-
-  .card{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-  }
-
-  /* ---------- form ---------- */
-
-  .form-card{ padding:28px; }
-
-  .form-head{
-    display:flex;
-    align-items:baseline;
-    justify-content:space-between;
-    margin-bottom:20px;
-  }
-
-  .form-head h2{
-    font-size:15px;
-    font-weight:650;
-    margin:0;
-  }
-
-  .clear-link{
-    font-size:13px;
-    color:var(--muted);
-    background:none;
-    border:none;
-    cursor:pointer;
-    padding:0;
-    font-family:inherit;
-    text-decoration:underline;
-    text-underline-offset:2px;
-  }
-  .clear-link:hover{ color:var(--ink-soft); }
-
-  .field{ margin-bottom:20px; }
-
-  .field label{
-    display:block;
-    font-size:13px;
-    font-weight:600;
-    color:var(--ink-soft);
-    margin-bottom:6px;
-  }
-
-  .field .hint{
-    font-size:12px;
-    color:var(--muted);
-    margin-top:5px;
-    line-height:1.4;
-  }
-
-  textarea, select{
-    width:100%;
-    font-family:inherit;
-    font-size:14.5px;
-    color:var(--ink);
-    background:#fff;
-    border:1px solid var(--border);
-    border-radius:9px;
-    padding:11px 12px;
-    line-height:1.5;
-    resize:vertical;
-  }
-
-  textarea{ min-height:72px; }
-
-  textarea:focus, select:focus, button:focus-visible{
-    outline:2px solid var(--focus);
-    outline-offset:1px;
-    border-color:var(--focus);
-  }
-
-  .segmented{
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap;
-  }
-
-  .seg-btn{
-    flex:1 1 auto;
-    text-align:center;
-    font-family:inherit;
-    font-size:13.5px;
-    font-weight:550;
-    padding:9px 10px;
-    border-radius:8px;
-    border:1px solid var(--border);
-    background:#fff;
-    color:var(--ink-soft);
-    cursor:pointer;
-    white-space:nowrap;
-  }
-
-  .seg-btn[aria-pressed="true"]{
-    background:var(--primary);
-    border-color:var(--primary);
-    color:var(--primary-ink);
-  }
-
-  .seg-btn.tone[data-tone="direct"][aria-pressed="true"]{ background:var(--direct); border-color:var(--direct); }
-  .seg-btn.tone[data-tone="coaching"][aria-pressed="true"]{ background:var(--coaching); border-color:var(--coaching); }
-  .seg-btn.tone[data-tone="supportive"][aria-pressed="true"]{ background:var(--supportive); border-color:var(--supportive); }
-
-  .generate-btn{
-    width:100%;
-    margin-top:6px;
-    padding:13px 16px;
-    font-family:inherit;
-    font-size:15px;
-    font-weight:650;
-    color:#fff;
-    background:var(--primary);
-    border:none;
-    border-radius:9px;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    gap:9px;
-  }
-  .generate-btn:hover{ filter:brightness(1.08); }
-  .generate-btn:disabled{ opacity:0.65; cursor:default; }
-
-  .spinner{
-    width:15px; height:15px;
-    border-radius:50%;
-    border:2px solid rgba(255,255,255,0.4);
-    border-top-color:#fff;
-    animation:spin 0.7s linear infinite;
-    display:none;
-  }
-  .generate-btn.loading .spinner{ display:inline-block; }
-  @keyframes spin{ to{ transform:rotate(360deg); } }
-
-  .error-box{
-    margin-top:14px;
-    padding:12px 14px;
-    border-radius:8px;
-    background:#FBEEE7;
-    border:1px solid #E7C7B4;
-    color:#7A3418;
-    font-size:13.5px;
-    line-height:1.5;
-    display:none;
-  }
-  .error-box.show{ display:block; }
-
-  /* ---------- output ---------- */
-
-  .output-card{ padding:0; min-height:420px; display:flex; flex-direction:column; }
-
-  .empty-state{
-    flex:1;
-    display:flex;
-    flex-direction:column;
-    align-items:flex-start;
-    justify-content:center;
-    padding:56px 40px;
-    color:var(--muted);
-    font-size:14.5px;
-    line-height:1.6;
-    max-width:440px;
-  }
-  .empty-state strong{ color:var(--ink-soft); display:block; margin-bottom:6px; font-size:15px; }
-
-  .output-head{
-    padding:22px 28px;
-    border-bottom:1px solid var(--border);
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:16px;
-    flex-wrap:wrap;
-  }
-
-  .output-meta{ font-size:13px; color:var(--muted); display:flex; gap:14px; flex-wrap:wrap; }
-  .output-meta span strong{ color:var(--ink-soft); font-weight:600; }
-
-  .tone-chips{ display:flex; gap:6px; }
-
-  .chip{
-    font-size:12.5px;
-    font-weight:600;
-    padding:6px 12px;
-    border-radius:999px;
-    border:1px solid transparent;
-    cursor:pointer;
-    font-family:inherit;
-  }
-  .chip[data-tone="direct"]{ background:var(--direct-tint); color:var(--direct); }
-  .chip[data-tone="coaching"]{ background:var(--coaching-tint); color:var(--coaching); }
-  .chip[data-tone="supportive"]{ background:var(--supportive-tint); color:var(--supportive); }
-  .chip.active{ border-color:currentColor; }
-  .chip:hover{ filter:brightness(0.97); }
-
-  .output-body{ padding:28px; }
-
-  .grounding-block{
-    background:var(--surface-2);
-    border-left:3px solid var(--primary);
-    border-radius:6px;
-    padding:14px 16px;
-    margin:0 0 22px 0;
-  }
-
-  .grounding-label{
-    font-size:11.5px;
-    font-weight:650;
-    letter-spacing:0.02em;
-    color:var(--primary);
-    margin:0 0 5px 0;
-  }
-
-  .grounding-text{
-    margin:0;
-    font-size:13.5px;
-    font-style:italic;
-    line-height:1.55;
-    color:var(--ink-soft);
-  }
-
-  .opening{
-    font-size:16.5px;
-    font-weight:600;
-    line-height:1.5;
-    margin:0 0 26px 0;
-    padding-bottom:22px;
-    border-bottom:1px solid var(--border);
-  }
-
-  .sbi-list{
-    list-style:none;
-    margin:0 0 26px 0;
-    padding:0;
-    display:flex;
-    flex-direction:column;
-    gap:16px;
-  }
-
-  .sbi-item{ display:flex; gap:14px; }
-
-  .sbi-num{
-    flex:none;
-    width:24px; height:24px;
-    border-radius:50%;
-    background:var(--surface-2);
-    color:var(--ink-soft);
-    font-size:12px;
-    font-weight:650;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    margin-top:1px;
-  }
-
-  .sbi-text .sbi-label{
-    font-size:12.5px;
-    font-weight:650;
-    color:var(--ink-soft);
-    margin:0 0 3px 0;
-  }
-
-  .sbi-text p{
-    margin:0;
-    font-size:14.5px;
-    line-height:1.6;
-    color:var(--ink);
-  }
-
-  .pushback-box{
-    background:var(--surface-2);
-    border-radius:10px;
-    padding:18px 20px;
-    margin-bottom:26px;
-  }
-
-  .pushback-row{ display:flex; gap:12px; margin-bottom:14px; }
-  .pushback-row:last-child{ margin-bottom:0; }
-
-  .pushback-tag{
-    flex:none;
-    font-size:11.5px;
-    font-weight:650;
-    color:var(--muted);
-    width:78px;
-    padding-top:1px;
-  }
-
-  .pushback-row p{
-    margin:0;
-    font-size:14.5px;
-    line-height:1.6;
-  }
-
-  .pushback-row.them p{ font-style:italic; color:var(--ink-soft); }
-
-  .closing-block{
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-    margin:0 0 24px 0;
-  }
-
-  .closing-block p{
-    margin:0;
-    font-size:14.5px;
-    line-height:1.6;
-  }
-
-  .closing-label{
-    font-size:12.5px;
-    font-weight:650;
-    color:var(--ink-soft);
-  }
-
-  .copy-btn{
-    font-family:inherit;
-    font-size:14px;
-    font-weight:600;
-    padding:10px 18px;
-    border-radius:8px;
-    border:1px solid var(--border);
-    background:#fff;
-    color:var(--ink);
-    cursor:pointer;
-  }
-  .copy-btn:hover{ background:var(--surface-2); }
-  .copy-btn.copied{ border-color:var(--coaching); color:var(--coaching); }
-
-  @media (max-width:480px){
-    .pushback-row{ flex-direction:column; gap:4px; }
-    .pushback-tag{ width:auto; }
-  }
-</style>
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
