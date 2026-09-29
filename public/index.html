@@ -56,13 +56,25 @@
     margin:0 auto;
   }
 
-  header.page h1{
+   header.page h1{
     font-family:'Cormorant Garamond', Georgia, serif;
-    font-size:38px;
+    font-size:clamp(24px, 3.4vw, 34px);
     font-weight:600;
     letter-spacing:-0.01em;
+    line-height:1.25;
     margin:0 0 10px 0;
+    max-width:720px;
     color:var(--ink);
+  }
+
+  header.page .brand-mark{
+    font-family:'DM Sans', sans-serif;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--primary);
+    margin:0 0 10px 0;
   }
 
   header.page p{
@@ -73,6 +85,16 @@
     line-height:1.5;
   }
 
+  header.page .tagline{
+    font-family:'Cormorant Garamond', Georgia, serif;
+    font-style:italic;
+    font-weight:600;
+    font-size:20px;
+    color:var(--primary);
+    margin:0 0 14px 0;
+    max-width:620px;
+    line-height:1.4;
+  }
   .app{
     display:grid;
     grid-template-columns:minmax(320px,440px) 1fr;
@@ -428,7 +450,8 @@
 <body>
 
 <header class="page">
-  <h1>Say It Easy</h1>
+    <div class="brand-mark">Say It Clean</div>
+  <h1>If you think having uncomfortable conversations is hard, wait until you see the results of not having them.</h1>
   <p>Describe the moment once, then draft the conversation in whichever tone and cultural context fits — and switch either without retyping anything.</p>
 </header>
 
